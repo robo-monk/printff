@@ -7,7 +7,8 @@
 	hexa: .asciz "%lX"
 
 .data
-	test: .asciz "yeeet %d%%"
+	test: .asciz "yeeet 100%% digit: <%d> | %% %% %%  <%d>  | <%d> end of %r string"
+	ch_table: .asciz "0123456789%"
 	test_ch: .asciz "e"
 
 
@@ -45,11 +46,16 @@ count: # (string to count)
 	# prologue
 	pushq	%rbp 			# push the base pointer (and align the stack)
 	pushq	%rbx			# push contents of rbx
+	pushq 	%r11
 
 	movq $0, %rsi
 	call find
 
+	movq $-1, %r11
+	mulq %r11
+
 	# epilogue
+	popq    %r11
 	popq	%rbx			# restore og rbx 
 	popq	%rbp			# restore base pointer location 
 	ret
@@ -57,13 +63,13 @@ count: # (string to count)
 # writes '%(rsi)' sequences
 # ascii: | % - 32 | 0 - 0 | d - 64 | u - 32 | s - 74 |
 write_sequence: #( memory andress, index of %, replace_with)
+# ret: bytes written, if negative or did not use replace-with
 	
 	# prologue
 	pushq	%rbp 			# push the base pointer (and align the stack)
 	pushq 	%r11
 	pushq 	%r12
 	movq	%rsp, %rbp		# copy stack pointer value to base pointer
-	
 	
 	pushq %rdi
 	pushq %rsi
@@ -92,19 +98,24 @@ write_sequence: #( memory andress, index of %, replace_with)
 	// if none of the above jump:
 	no_templ_match:
 	// prints %(rax) and returns	
+		movq $10, %rdi
+		call write_from_table # write a %
+
 		movq $0, %rax
 		jmp wseq_epilogue
 
 	write_percentage:
-		movq $1, %rax
+		movq $10, %rdi
+		call write_from_table # write a %
+
+		movq $-1, %rax
 		jmp wseq_epilogue
 
 	write_d:
+		popq %rdi		# pop rdx ( value ) to table
+		call write_from_table
+
 		movq $1, %rax
-		movq $2, %rsi
-		movq $digit, %rdi
-		movq $0, %rax
-		call printf
 		jmp wseq_epilogue
 
 	write_u:
@@ -119,15 +130,15 @@ write_sequence: #( memory andress, index of %, replace_with)
 	# epilogue
 	wseq_epilogue:
 	movq	%rbp, %rsp		# clear local variables from stack
-	popq    %r11
 	popq    %r12
+	popq    %r11
 	popq	%rbp			# restore base pointer location 
 	ret
 
 
 # params:  andress of thing to search, andress of thing to find 
 # ret: returns relative address of the thing to find in the thing to search (in ascii decimal)
-# 	or -1 if string doesnt contain it
+# 	or -length if string doesnt contain it
 # ascii: | % - 32 | 0 - 0 | d - 64 | u - 32 | s - 74 |
 find:
 	# prologue
@@ -164,10 +175,9 @@ find:
 		jmp find_epilogue
 
 	did_not_find:
-		cmpq $0, %r13 		# if we were looking for 0, we found it :)
-		je return_index
+		movq $-1, %rax
+		mulq %r12		# return -%r12, aka -length of string
 
-		movq $-1, %rax 		# otherwise return -1
 
 	find_epilogue:
 	movq	%rbp, %rsp		# clear local variables from stack
@@ -198,28 +208,61 @@ write_bytes:
 	popq	%rbp			# restore base pointer location 
 	ret
 	
-# params: string to print, ascii code of until 
-# ret: no
+# params: string to print, ascii code of until, 0 if string doestn contain it
+# ret:  until index (-1 if it doenst contain it)
 write_until:
 	# prologue
 	pushq	%rbp 			# push the base pointer (and align the stack)
 	pushq	%rbx			# push contents of rbx
+	pushq 	%r11
 
 	pushq %rdi			# push string to print to the stack
 	call find
+	movq %rax, %r11			# hold find ret value to r11
+
+	popq %rdi			# memory to print
+	cmpq $0, %rax 			# string doesnt contain provided ascii
+	jge write_until_bytes		# write string until the end
+
+	# means that find returned negative 
+	# inverse output of find and print 
+	# length-n bytes
+	movq $-1, %rax
+	mulq %r11
+
+
+	write_until_bytes:
 	movq %rax, %rsi
 	decq %rsi 			# write until (not including)
-	
-	popq %rdi
 
-	pushq %rax
+	pushq %r11
+	call write_bytes
+	popq %rax			# return the until index
+	# epilogue
+	popq 	%r11
+	popq	%rbx			# restore og rbx 
+	popq	%rbp			# restore base pointer location 
+	ret
+
+
+write_from_table: # ( index of character in table)
+
+	# prologue
+	pushq	%rbp 			# push the base pointer (and align the stack)
+	pushq	%rbx			# push contents of rbx
+
+	pushq %rdi
+	movq $ch_table, %rdi
+	popq %rsi
+	addq %rsi, %rdi
+	movq $1, %rsi			# write 1 byte
 	call write_bytes
 
-	popq %rax 			# return the until index
 	# epilogue
 	popq	%rbx			# restore og rbx 
 	popq	%rbp			# restore base pointer location 
 	ret
+
 # params: string to print
 # ret: no
 write:
@@ -249,27 +292,43 @@ printff:
 	pushq	%r14			# push contents of r14
 	movq	%rsp, %rbp		# copy stack pointer value to base pointer
 
+	# push all the arguments in the stack
+	pushq %r9
+	pushq %r8
+	pushq %rcx
+	pushq %rdx
 	pushq %rsi
-	pushq %rdi
+
+	movq %rdi, %r12 		# r12 holds the string andress
 
 	movq $37, %rsi
 	call write_until
+	movq %rax, %rsi 		# write until returns index of until
+	// if return of write_utnil is <0, break as string is over
+	cmpq $0, %rax
+	jle printff_epilogue
 
-	popq %rdi # andress
-	movq %rax, %rsi # write until returns index of until
-	movq $5, %rdx
+	movq %r12, %rdi			# move current cursor to rdi as first param of write_sequence
+
+	addq %rax, %r12			# move cursor to index of until
+
+	movq (%rsp), %rdx
 	call write_sequence
+	cmpq $0, %rax 			# if equal it means write sequence used the param
+	jle recur
+	popq %rdx			# pop first argument as last param for write_sequence 
 
-	/*popq %rdi*/
-	/*movq $100, %rsi*/
-	/*call find_sequence*/
-	/*movq %rax, %rsi*/
-	/*movq $digit, %rdi*/
-	/*movq $0, %rax*/
-	/*call printf*/
-	/*popq %rsi*/
+	recur:
+	mulq %rax			# rax = |rax|
+	addq %rax, %r12
 
-	#
+	movq %r12, %rdi 		# r12 holds the string andress
+	popq %rsi
+	popq %rdx
+	popq %rcx
+	call printff
+
+	printff_epilogue:
 	movq	%rbp, %rsp		# clear local variables from stack
 	popq	%r14			# restore og r14 
 	popq	%r13			# restore og r13 
@@ -283,17 +342,19 @@ main:
 	movq %rsp, %rbp		# copy stack pointer value to base pointer
 
 	movq $test, %rdi
-	movq $0, %rsi
+	movq $4, %rsi
+	movq $5, %rdx
+	movq $6, %rcx
 	call printff
 
-	/*movq $4, %rsi*/
+	/*movq $37, %rsi*/
 	/*movq $test, %rdi*/
 	/*call find*/
 	
-	movq %rax, %rsi
-	movq $digit, %rdi
-	movq $0, %rax
-	call printf
+	/*movq %rax, %rsi*/
+	/*movq $digit, %rdi*/
+	/*movq $0, %rax*/
+	/*call printf*/
 
 	popq %rbp			# restore base pointer location 
 	movq $0, %rdi		# load program exit code
