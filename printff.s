@@ -4,37 +4,40 @@
 # params: format_string, values
 # ret: no
 printff:
-	popq %r14	# pop return andress of this to r14	 
-	movq %rsp, %r15
+	# prologue
+	popq %r14		# pop return andress of this to r14	 
+	movq %rsp, %rbp		# store stack pointer to rbp
 
+	# pushing all possible paramters to the stack
 	pushq %r9
 	pushq %r8
 	pushq %rcx
 	pushq %rdx
 	pushq %rsi
 
-	/*call printf*/
-	printff_stack:
-		/*addq $8, %rsp			# move stack pointer to skip return andress of this func*/
+	printff_stack: 
 		movq %rdi, %r12 		# r12 holds the string andress
 
+		# write until a % or the end of the string
 		movq $37, %rsi
 		call write_until		# write until %	
-		movq %rax, %rsi 		# returning index to rsi	
 
-		cmpq $0, %rax			# if index < 0, string ended, end this
+		cmpq $0, %rax			# if index < 0, string ended, end
 		jle printff_end
 
+		# means we hit a %, writing sequence...
 		movq %r12, %rdi			# string andress as first param of write_sequence
-		movq (%rsp), %rdx
+		movq %rax, %rsi 		# 2nd param is index of % stored in rsi already
+		movq (%rsp), %rdx		# value that rsp points as 3rd param of write sequence
 
-		addq %rax, %r12			# increment cursor before calling write sequence
+		addq %rax, %r12			# increment cursor by % index, before calling write sequence
 
 		call write_sequence
-		cmpq $0, %rax
-		jle recur
 
-		// if write sequence used the param, point to next argument stored in the stack
+		cmpq $0, %rax	
+		jle recur	# write_sequence did not use the param
+
+		/* if write sequence used the param, point to next argument stored in the stack */
 		addq $8, %rsp
 
 		recur:
@@ -45,9 +48,9 @@ printff:
 			jmp printff_stack
 
 
+	# epilogue
 	printff_end:
-
-	movq %r15, %rsp
+	movq %rbp, %rsp
 	pushq %r14	# push this andress back
 
 	ret
