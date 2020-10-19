@@ -185,11 +185,13 @@ write_sequence: #( memory andress, index of %, replace_with)
 		jmp wseq_epilogue
 
 	write_d:
-		popq %r12
+		movq (%rsp),  %r12
 		cmpq $0, %r12
 		jge write_u
+
 		movq $11, %rdi
 		call write_from_table
+
 		movq $-1, %rax
 		mulq %r12
 		pushq %rax
@@ -201,12 +203,14 @@ write_sequence: #( memory andress, index of %, replace_with)
 		movq %rax, %r11
 		/*decq %r11*/
 		push_digit:
+			pushq %r11
 			movq %r12, %rdi
 			movq %r11, %rsi
-			pushq %r11
 			call get_nth_digit
 			movq %rax, %rdi
+			/*movq $1, %rdi*/
 			call write_from_table
+			popq %r11
 			decq %r11
 			cmpq $-1, %r11
 			jg push_digit
@@ -439,20 +443,11 @@ main:
 	movq %rsp, %rbp		# copy stack pointer value to base pointer
 
 	movq $test, %rdi
-	movq $420, %rsi
+	movq $1420, %rsi
 	movq $69, %rdx
-	movq $-7, %rcx
+	movq $-2131, %rcx
 	movq $test2, %r8
 	call printff
-
-	movq $204, %rdi
-	movq $3, %rsi
-	call get_digit_count
-	
-	/*movq %rax, %rsi*/
-	/*movq $digit, %rdi*/
-	/*movq $0, %rax*/
-	/*call printf*/
 
 	popq %rbp			# restore base pointer location 
 	movq $0, %rdi		# load program exit code
