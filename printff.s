@@ -1,72 +1,54 @@
 .include "helpers/digits_helper.s"
 .include "helpers/write.s"
 
-
-printff_recursive:
-
-	addq $8, %rsp
-	movq %rdi, %r12 		# r12 holds the string andress
-
-	movq $37, %rsi
-	call write_until
-	movq %rax, %rsi 		# write until returns index of until
-	// if return of write_utnil is <0, break as string is over
-	cmpq $0, %rax
-	jle printff_recursive_ret
-
-	movq %r12, %rdi			# move current cursor to rdi as first param of write_sequence
-
-	addq %rax, %r12			# move cursor to index of until
-
-	movq (%rsp), %rdx
-	call write_sequence
-	cmpq $0, %rax 			# if equal it means write sequence used the param
-	jle recur
-
-	popq %rdx			# pop first argument as last param for write_sequence 
-
-	recur:
-	mulq %rax			# rax = |rax|
-	addq %rax, %r12
-
-	movq %r12, %rdi 		# r12 holds the string andress
-	/*popq %rsi*/
-	/*popq %rdx*/
-	/*popq %rcx*/
-	call printff_recursive
-
-	printff_recursive_ret:
-	ret
-	/*jmp printff_epilogue*/
-
-
 # params: format_string, values
 # ret: no
 printff:
-	# prologue
-	/*pushq	%rbp 			# push the base pointer (and align the stack)*/
-	/*pushq	%rbx			# push contents of rbx*/
-	/*pushq	%r12			# push contents of r12*/
-	/*pushq	%r13			# push contents of r13*/
-	/*pushq	%r14			# push contents of r14*/
-	/*movq	%rsp, %rbp		# copy stack pointer value to base pointer*/
+	popq %r14	# pop return andress of this to r14	 
+	movq %rsp, %r15
 
-	addq $8, %rsp
-	# push all the arguments in the stack
 	pushq %r9
 	pushq %r8
 	pushq %rcx
 	pushq %rdx
 	pushq %rsi
-	call printff_recursive
-	
 
-	printff_epilogue:
-	/*movq	%rbp, %rsp		# clear local variables from stack*/
-	/*popq	%r14			# restore og r14 */
-	/*popq	%r13			# restore og r13 */
-	/*popq	%r12			# restore og r12 value */
-	/*popq	%rbx			# restore og rbx */
-	/*popq	%rbp			# restore base pointer location */
+	/*call printf*/
+	printff_stack:
+		/*addq $8, %rsp			# move stack pointer to skip return andress of this func*/
+		movq %rdi, %r12 		# r12 holds the string andress
+
+		movq $37, %rsi
+		call write_until		# write until %	
+		movq %rax, %rsi 		# returning index to rsi	
+
+		cmpq $0, %rax			# if index < 0, string ended, end this
+		jle printff_end
+
+		movq %r12, %rdi			# string andress as first param of write_sequence
+		movq (%rsp), %rdx
+
+		addq %rax, %r12			# increment cursor before calling write sequence
+
+		call write_sequence
+		cmpq $0, %rax
+		jle recur
+
+		// if write sequence used the param, point to next argument stored in the stack
+		addq $8, %rsp
+
+		recur:
+			mulq %rax		# rax = |rax| ( -1 < rax < 1)
+			addq %rax, %r12		# increment andress by how many bytes the write
+						# sequence returns
+			movq %r12, %rdi		# r12 holds the string andress
+			jmp printff_stack
+
+
+	printff_end:
+
+	movq %r15, %rsp
+	pushq %r14	# push this andress back
+
 	ret
 
